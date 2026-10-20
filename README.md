@@ -31,6 +31,8 @@ The supported events are:
 The main rules are:
 
 - A payment can be captured only after authorization.
+- Captures are always for the full payment amount; partial capture is
+  intentionally out of scope for this educational model.
 - A payment can be refunded only after capture.
 - Partial refunds are allowed.
 - After a partial refund, the payment stays `Captured` with a reduced
@@ -46,7 +48,8 @@ The domain is represented with algebraic data types. `PaymentState` and
 `Event` have a finite set of constructors, so the transition function can
 handle each combination explicitly. `Money` wraps an integer rather than
 using `Double`, avoiding floating-point rounding for paise or other minor
-currency units.
+currency units. `mkMoney` returns `Nothing` for zero or negative values, so
+invalid `Money` values cannot enter events through the public API.
 
 The transition function has this type:
 
@@ -74,8 +77,9 @@ the implementation deterministic and easy to test.
 
 This educational implementation compares the original event on a reused key.
 A key reused with a different event returns `IdempotencyKeyConflict`. A
-production implementation should store a canonical request fingerprint with
-each key, especially when events contain larger payloads.
+production implementation should store a hash of a canonical request
+fingerprint in a database with a unique key constraint, or in Redis with a
+TTL for bounded retention.
 
 `Payment` values are created through `newPayment`, which rejects non-positive
 payment amounts. The `Payment` constructor is kept private to the module, so
@@ -152,6 +156,9 @@ checks that:
 
 - **Integer money:** `Money` stores minor units as `Integer`, so calculations
   do not introduce floating-point rounding.
+- **Full capture only:** partial capture is deliberately excluded to keep the
+  lifecycle small; production support would track captured and remaining
+  authorizable amounts separately.
 - **Pure transitions:** state changes are represented as returned values; the
   transition function performs no IO and does not mutate the input payment.
 - **Explicit errors:** `Either TransitionError Payment` makes invalid events

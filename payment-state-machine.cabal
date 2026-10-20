@@ -10,6 +10,7 @@ library
       Payment.Idempotency
   hs-source-dirs:   src
   default-language: Haskell2010
+  ghc-options:      -Wall -Wincomplete-patterns
   build-depends:
       base >= 4.17 && < 5,
       containers,
@@ -19,6 +20,7 @@ executable payment-state-machine
   main-is:          Main.hs
   hs-source-dirs:   app
   default-language: Haskell2010
+  ghc-options:      -Wall -Wincomplete-patterns
   build-depends:
       base >= 4.17 && < 5,
       payment-state-machine,
@@ -29,6 +31,7 @@ test-suite payment-state-machine-test
   main-is:          Spec.hs
   hs-source-dirs:   test
   default-language: Haskell2010
+  ghc-options:      -Wall -Wincomplete-patterns
   build-depends:
       base >= 4.17 && < 5,
       hspec,

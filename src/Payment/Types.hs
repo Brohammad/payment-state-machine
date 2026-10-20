@@ -24,8 +24,10 @@ newtype Money = Money {minorUnits :: Integer}
     deriving (Eq, Ord, Show)
 
 -- Construct money from integer minor units.
-mkMoney :: Integer -> Money
-mkMoney = Money
+mkMoney :: Integer -> Maybe Money
+mkMoney value
+    | value <= 0 = Nothing
+    | otherwise = Just (Money value)
 
 -- PaymentState describes where a payment is in its lifecycle.
 data PaymentState
@@ -70,19 +72,19 @@ data TransitionError
     = InvalidTransition PaymentState Event
     | RefundExceedsCapturedAmount Money Money
     | InvalidRefundAmount Money
-    | InvalidPaymentAmount Money
+    | InvalidPaymentAmount Integer
     | IdempotencyKeyConflict Event Event
     deriving (Eq, Show)
 
 -- Build a payment while enforcing the positive amount invariant.
-newPayment :: Text -> Money -> Either TransitionError Payment
-newPayment identifier amount@(Money value)
-    | value <= 0 = Left (InvalidPaymentAmount amount)
+newPayment :: Text -> Integer -> Either TransitionError Payment
+newPayment identifier value
+    | value <= 0 = Left (InvalidPaymentAmount value)
     | otherwise =
         Right
             Payment
                 { paymentId = identifier
-                , paymentAmount = amount
+                , paymentAmount = Money value
                 , paymentState = Created
                 , capturedAmount = Nothing
                 , refundedAmount = Money 0

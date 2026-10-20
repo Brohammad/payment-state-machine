@@ -11,10 +11,10 @@ main :: IO ()
 main = hspec $ do
     describe "transition" $ do
         it "rejects non-positive payment amounts at construction" $ do
-            newPayment (Text.pack "invalid") (mkMoney 0)
-                `shouldBe` Left (InvalidPaymentAmount (mkMoney 0))
-            newPayment (Text.pack "invalid") (mkMoney (-1))
-                `shouldBe` Left (InvalidPaymentAmount (mkMoney (-1)))
+            newPayment (Text.pack "invalid") 0
+                `shouldBe` Left (InvalidPaymentAmount 0)
+            newPayment (Text.pack "invalid") (-1)
+                `shouldBe` Left (InvalidPaymentAmount (-1))
         it "authorizes a created payment" $
             transition createdPayment Authorize
                 `shouldBe` Right
@@ -29,29 +29,29 @@ main = hspec $ do
                 `shouldBe` Right
                     ( authorizedPayment
                         { paymentState = Captured
-                        , capturedAmount = Just (mkMoney 1000)
+                        , capturedAmount = Just (money 1000)
                         , paymentHistory = [PaymentEvent Capture Captured]
                         }
                     )
 
         it "allows a partial refund" $
-            transition capturedPayment (Refund (mkMoney 400))
+            transition capturedPayment (Refund (money 400))
                 `shouldBe` Right
                     ( capturedPayment
-                        { refundedAmount = mkMoney 400
+                        { refundedAmount = money 400
                         , paymentHistory =
-                            [PaymentEvent (Refund (mkMoney 400)) Captured]
+                            [PaymentEvent (Refund (money 400)) Captured]
                         }
                     )
 
         it "marks a fully refunded payment as refunded" $
-            transition capturedPayment (Refund (mkMoney 1000))
+            transition capturedPayment (Refund (money 1000))
                 `shouldBe` Right
                     ( capturedPayment
                         { paymentState = Refunded
-                        , refundedAmount = mkMoney 1000
+                        , refundedAmount = money 1000
                         , paymentHistory =
-                            [PaymentEvent (Refund (mkMoney 1000)) Refunded]
+                            [PaymentEvent (Refund (money 1000)) Refunded]
                         }
                     )
 
@@ -77,27 +77,16 @@ main = hspec $ do
 
         it "fails a captured payment" $
             transition capturedPayment (Fail (Text.pack "processor error"))
-                `shouldBe` Right
-                    ( capturedPayment
-                        { paymentState = Failed
-                        , failureReason = Just (Text.pack "processor error")
-                        , paymentHistory =
-                            [ PaymentEvent
-                                (Fail (Text.pack "processor error"))
-                                Failed
-                            ]
-                        }
-                    )
+                `shouldBe` Left
+                    (InvalidTransition Captured (Fail (Text.pack "processor error")))
 
         it "rejects refunds larger than the captured amount" $
-            transition capturedPayment (Refund (mkMoney 1001))
-                `shouldBe` Left (RefundExceedsCapturedAmount (mkMoney 1001) (mkMoney 1000))
+            transition capturedPayment (Refund (money 1001))
+                `shouldBe` Left (RefundExceedsCapturedAmount (money 1001) (money 1000))
 
         it "rejects non-positive refunds" $ do
-            transition capturedPayment (Refund (mkMoney 0))
-                `shouldBe` Left (InvalidRefundAmount (mkMoney 0))
-            transition capturedPayment (Refund (mkMoney (-1)))
-                `shouldBe` Left (InvalidRefundAmount (mkMoney (-1)))
+            mkMoney 0 `shouldBe` Nothing
+            mkMoney (-1) `shouldBe` Nothing
 
         it "rejects every invalid non-terminal transition" $
             mapM_ assertInvalidTransition invalidTransitions
@@ -142,7 +131,7 @@ main = hspec $ do
 
 createdPayment :: Payment
 createdPayment =
-    case newPayment (Text.pack "payment-1") (mkMoney 1000) of
+    case newPayment (Text.pack "payment-1") 1000 of
         Right payment -> payment
         Left errorMessage -> error (show errorMessage)
 
@@ -153,14 +142,14 @@ capturedPayment :: Payment
 capturedPayment =
     authorizedPayment
         { paymentState = Captured
-        , capturedAmount = Just (mkMoney 1000)
+        , capturedAmount = Just (money 1000)
         }
 
 allEvents :: [Event]
 allEvents =
     [ Authorize
     , Capture
-    , Refund (mkMoney 1)
+    , Refund (money 1)
     , Void
     , Fail (Text.pack "failure")
     ]
@@ -170,7 +159,7 @@ invalidTransitions =
     [ (createdPayment, Capture)
     , (createdPayment, Void)
     , (authorizedPayment, Authorize)
-    , (authorizedPayment, Refund (mkMoney 100))
+    , (authorizedPayment, Refund (money 100))
     , (capturedPayment, Authorize)
     , (capturedPayment, Capture)
     , (capturedPayment, Void)
@@ -180,19 +169,19 @@ transitionTable :: [(Payment, Event, Bool)]
 transitionTable =
     [ (createdPayment, Authorize, True)
     , (createdPayment, Capture, False)
-    , (createdPayment, Refund (mkMoney 1), False)
+    , (createdPayment, Refund (money 1), False)
     , (createdPayment, Void, False)
     , (createdPayment, Fail (Text.pack "failure"), True)
     , (authorizedPayment, Authorize, False)
     , (authorizedPayment, Capture, True)
-    , (authorizedPayment, Refund (mkMoney 1), False)
+    , (authorizedPayment, Refund (money 1), False)
     , (authorizedPayment, Void, True)
     , (authorizedPayment, Fail (Text.pack "failure"), True)
     , (capturedPayment, Authorize, False)
     , (capturedPayment, Capture, False)
-    , (capturedPayment, Refund (mkMoney 1), True)
+    , (capturedPayment, Refund (money 1), True)
     , (capturedPayment, Void, False)
-    , (capturedPayment, Fail (Text.pack "failure"), True)
+    , (capturedPayment, Fail (Text.pack "failure"), False)
     ]
         ++ [ (createdPayment{paymentState = terminal}, event, False)
            | terminal <- [Failed, Voided, Refunded]
@@ -227,7 +216,7 @@ assertTerminalState state =
 
 prop_refundNeverExceedsCaptured :: Positive Integer -> Property
 prop_refundNeverExceedsCaptured (Positive requested) =
-    let result = transition capturedPayment (Refund (mkMoney requested))
+    let result = transition capturedPayment (Refund (money requested))
      in case result of
             Left RefundExceedsCapturedAmount{} -> property True
             Left InvalidRefundAmount{} -> property False
@@ -249,13 +238,14 @@ prop_terminalStatesRejectEvents =
 prop_idempotencyIsStable :: Positive Integer -> Property
 prop_idempotencyIsStable (Positive suffix) =
     let key = IdempotencyKey (Text.pack ("request-" ++ show suffix))
-        once = applyIdempotent emptyStore createdPayment key Authorize
-        twice = applyIdempotent (fst once) createdPayment key Authorize
-     in twice === once
+        firstAttempt = applyIdempotent emptyStore createdPayment key Authorize
+        secondAttempt =
+            applyIdempotent (fst firstAttempt) createdPayment key Authorize
+     in secondAttempt === firstAttempt
 
 prop_multipleRefundsNeverExceedCaptured :: [Positive Integer] -> Property
 prop_multipleRefundsNeverExceedCaptured requests =
-    let refunds = map (Refund . mkMoney . getPositive) requests
+    let refunds = map (Refund . money . getPositive) requests
         results = scanl applyRefundEvent (Right capturedPayment) refunds
      in conjoin
             [ case result of
@@ -274,3 +264,9 @@ applyRefundEvent ::
     Either TransitionError Payment
 applyRefundEvent (Left errorMessage) _ = Left errorMessage
 applyRefundEvent (Right payment) event = transition payment event
+
+money :: Integer -> Money
+money value =
+    case mkMoney value of
+        Just amount -> amount
+        Nothing -> error "test money must be positive"

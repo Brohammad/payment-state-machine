@@ -11,7 +11,7 @@ main = do
 
 initialPayment :: Payment
 initialPayment =
-    case newPayment (Text.pack "demo-payment") (mkMoney 1000) of
+    case newPayment (Text.pack "demo-payment") 1000 of
         Right payment -> payment
         Left errorMessage -> error (show errorMessage)
 
@@ -19,9 +19,15 @@ demoEvents :: [Event]
 demoEvents =
     [ Authorize
     , Capture
-    , Refund (mkMoney 250)
-    , Refund (mkMoney 750)
+    , Refund (money 250)
+    , Refund (money 750)
     ]
+
+money :: Integer -> Money
+money value =
+    case mkMoney value of
+        Just amount -> amount
+        Nothing -> error "demo money must be positive"
 
 replayEvents :: Payment -> [Event] -> IO ()
 replayEvents _ [] = pure ()

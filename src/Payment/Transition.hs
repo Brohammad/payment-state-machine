@@ -48,7 +48,7 @@ transition payment (Fail reason) =
     case paymentState payment of
         Created -> successWithReason payment (Fail reason) Failed reason
         Authorized -> successWithReason payment (Fail reason) Failed reason
-        Captured -> successWithReason payment (Fail reason) Failed reason
+        Captured -> Left (InvalidTransition Captured (Fail reason))
         Refunded -> Left (InvalidTransition Refunded (Fail reason))
         Failed -> Left (InvalidTransition Failed (Fail reason))
         Voided -> Left (InvalidTransition Voided (Fail reason))
@@ -68,7 +68,7 @@ applyRefund payment amount =
                         if requested > remaining
                             then
                                 Left
-                                    (RefundExceedsCapturedAmount amount (mkMoney remaining))
+                                    (RefundExceedsCapturedAmount amount (positiveMoney remaining))
                             else
                                 if requested == remaining
                                     then
@@ -78,7 +78,7 @@ applyRefund payment amount =
                                             Refunded
                                             ( \updated ->
                                                 updated
-                                                    { refundedAmount = mkMoney (refunded + requested)
+                                                    { refundedAmount = positiveMoney (refunded + requested)
                                                     }
                                             )
                                     else
@@ -88,7 +88,7 @@ applyRefund payment amount =
                                             Captured
                                             ( \updated ->
                                                 updated
-                                                    { refundedAmount = mkMoney (refunded + requested)
+                                                    { refundedAmount = positiveMoney (refunded + requested)
                                                     }
                                             )
 
@@ -114,3 +114,9 @@ successWithReason payment event state reason =
         event
         state
         (\updated -> updated{failureReason = Just reason})
+
+positiveMoney :: Integer -> Money
+positiveMoney value =
+    case mkMoney value of
+        Just amount -> amount
+        Nothing -> error "positiveMoney called with a non-positive value"
