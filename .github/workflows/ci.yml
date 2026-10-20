@@ -7,12 +7,19 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        ghc-version: ['9.4', '9.14']
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
         with:
-          ghc-version: '9.4'
+          ghc-version: ${{ matrix.ghc-version }}
           cabal-version: 'latest'
       - run: cabal update
       - run: cabal build
       - run: cabal test
+      - name: Install Fourmolu
+        run: cabal install fourmolu --overwrite-policy=always
+      - name: Check formatting
+        run: fourmolu -m check src app test

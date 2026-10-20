@@ -1,5 +1,7 @@
 # payment-state-machine
 
+[![Haskell CI](https://github.com/Brohammad/payment-state-machine/actions/workflows/ci.yml/badge.svg)](https://github.com/Brohammad/payment-state-machine/actions/workflows/ci.yml)
+
 A small Haskell project that models a payment lifecycle with explicit state
 transitions and idempotent event processing.
 
@@ -70,10 +72,10 @@ When the same key is reused, the stored result is returned without applying
 the event again. The store is passed in and returned explicitly, which keeps
 the implementation deterministic and easy to test.
 
-This educational implementation does not compare the event on a reused key.
-Therefore, a key reused with a different event still returns the original
-result. A production implementation should store a request fingerprint with
-each key and reject a mismatched retry.
+This educational implementation compares the original event on a reused key.
+A key reused with a different event returns `IdempotencyKeyConflict`. A
+production implementation should store a canonical request fingerprint with
+each key, especially when events contain larger payloads.
 
 `Payment` values are created through `newPayment`, which rejects non-positive
 payment amounts. The `Payment` constructor is kept private to the module, so
@@ -91,6 +93,9 @@ payment-state-machine.cabal Cabal package definition
 cabal.project              Enables the test suite for `cabal test`
 README.md                 Project documentation
 ```
+
+`Payment` also keeps the failure reason and a successful transition history,
+which makes the model easier to inspect and audit.
 
 ## Build and run
 
@@ -155,6 +160,8 @@ checks that:
   implementation and keeps the state-passing model clear.
 - **Request consistency:** reusing a key with a different event is rejected;
   a production service would persist a stronger request fingerprint.
+- **Audit information:** failure reasons and successful event/state pairs are
+  retained on the payment for debugging and replay-oriented examples.
 - **No advanced extensions:** the code uses standard Haskell 2010 features,
   algebraic data types, pattern matching, recursion, and common libraries.
 
@@ -166,6 +173,6 @@ For production use, I would add:
    retries remain safe across process restarts.
 2. **Concurrency with STM**, coordinating concurrent requests safely while
    keeping the state transition itself pure.
-3. Stronger identifiers and validation for payment amounts and event payloads.
-4. Structured logging, API integration, and property-based tests for larger
-   generated event sequences.
+3. A database-backed request fingerprint and expiration policy for
+   idempotency records.
+4. Structured logging, API integration, and an HTTP service layer.
