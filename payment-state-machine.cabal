@@ -1,0 +1,37 @@
+cabal-version:      3.0
+name:               payment-state-machine
+version:            0.1.0.0
+build-type:         Simple
+
+library
+  exposed-modules:
+      Payment.Types
+      Payment.Transition
+      Payment.Idempotency
+  hs-source-dirs:   src
+  default-language: Haskell2010
+  build-depends:
+      base >= 4.17 && < 5,
+      containers,
+      text
+
+executable payment-state-machine
+  main-is:          Main.hs
+  hs-source-dirs:   app
+  default-language: Haskell2010
+  build-depends:
+      base >= 4.17 && < 5,
+      payment-state-machine,
+      text
+
+test-suite payment-state-machine-test
+  type:             exitcode-stdio-1.0
+  main-is:          Spec.hs
+  hs-source-dirs:   test
+  default-language: Haskell2010
+  build-depends:
+      base >= 4.17 && < 5,
+      hspec,
+      QuickCheck,
+      text,
+      payment-state-machine
