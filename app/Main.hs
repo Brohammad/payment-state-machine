@@ -11,20 +11,16 @@ main = do
 
 initialPayment :: Payment
 initialPayment =
-  Payment
-    { paymentId = Text.pack "demo-payment"
-    , paymentAmount = Money 1000
-    , paymentState = Created
-    , capturedAmount = Nothing
-    , refundedAmount = Money 0
-    }
+  case newPayment (Text.pack "demo-payment") (mkMoney 1000) of
+    Right payment -> payment
+    Left errorMessage -> error (show errorMessage)
 
 demoEvents :: [Event]
 demoEvents =
   [ Authorize
   , Capture
-  , Refund (Money 250)
-  , Refund (Money 750)
+  , Refund (mkMoney 250)
+  , Refund (mkMoney 750)
   ]
 
 replayEvents :: Payment -> [Event] -> IO ()

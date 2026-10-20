@@ -62,7 +62,7 @@ and a function returning either a result object or a typed exception value.
 `Payment.Idempotency` provides a pure in-memory store:
 
 ```haskell
-type Store = Map IdempotencyKey (Either TransitionError Payment)
+type Store = Map IdempotencyKey CachedResult
 ```
 
 When a key is new, the event is applied and its complete result is stored.
@@ -74,6 +74,10 @@ This educational implementation does not compare the event on a reused key.
 Therefore, a key reused with a different event still returns the original
 result. A production implementation should store a request fingerprint with
 each key and reject a mismatched retry.
+
+`Payment` values are created through `newPayment`, which rejects non-positive
+payment amounts. The `Payment` constructor is kept private to the module, so
+callers cannot bypass that initial validation.
 
 ## Project layout
 
@@ -134,6 +138,8 @@ states, invalid refund amounts, and idempotency behavior. QuickCheck also
 checks that:
 
 - A payment never refunds more than it captured.
+- A sequence of partial refunds never causes the refunded amount to exceed
+  the captured amount.
 - Terminal states reject every event.
 - Applying the same idempotency key twice equals applying it once.
 
@@ -147,6 +153,8 @@ checks that:
   visible to every caller.
 - **Simple idempotency:** `Data.Map` is enough for an educational in-memory
   implementation and keeps the state-passing model clear.
+- **Request consistency:** reusing a key with a different event is rejected;
+  a production service would persist a stronger request fingerprint.
 - **No advanced extensions:** the code uses standard Haskell 2010 features,
   algebraic data types, pattern matching, recursion, and common libraries.
 

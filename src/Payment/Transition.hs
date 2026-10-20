@@ -52,11 +52,13 @@ transition payment (Fail reason) =
     Voided -> Left (InvalidTransition Voided (Fail reason))
 
 applyRefund :: Payment -> Money -> Either TransitionError Payment
-applyRefund payment amount@(Money requested) =
+applyRefund payment amount =
   case capturedAmount payment of
     Nothing -> Left (InvalidTransition Captured (Refund amount))
-    Just (Money captured) ->
-      let Money refunded = refundedAmount payment
+    Just capturedAmountValue ->
+      let captured = minorUnits capturedAmountValue
+          refunded = minorUnits (refundedAmount payment)
+          requested = minorUnits amount
           remaining = captured - refunded
        in if requested <= 0
             then Left InvalidRefundAmount
@@ -68,9 +70,9 @@ applyRefund payment amount@(Money requested) =
                     then
                       Right payment
                         { paymentState = Refunded
-                        , refundedAmount = Money (refunded + requested)
+                        , refundedAmount = mkMoney (refunded + requested)
                         }
                     else
                       Right payment
-                        { refundedAmount = Money (refunded + requested)
+                        { refundedAmount = mkMoney (refunded + requested)
                         }

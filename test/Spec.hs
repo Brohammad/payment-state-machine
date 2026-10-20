@@ -20,26 +20,26 @@ main = hspec $ do
           Right
             ( authorizedPayment
                 { paymentState = Captured
-                , capturedAmount = Just (Money 1000)
+                , capturedAmount = Just (mkMoney 1000)
                 }
             )
 
     it "allows a partial refund" $
-      transition capturedPayment (Refund (Money 400))
+      transition capturedPayment (Refund (mkMoney 400))
         `shouldBe`
           Right
             ( capturedPayment
-                { refundedAmount = Money 400
+                { refundedAmount = mkMoney 400
                 }
             )
 
     it "marks a fully refunded payment as refunded" $
-      transition capturedPayment (Refund (Money 1000))
+      transition capturedPayment (Refund (mkMoney 1000))
         `shouldBe`
           Right
             ( capturedPayment
                 { paymentState = Refunded
-                , refundedAmount = Money 1000
+                , refundedAmount = mkMoney 1000
                 }
             )
 
@@ -56,13 +56,13 @@ main = hspec $ do
         `shouldBe` Right (capturedPayment { paymentState = Failed })
 
     it "rejects refunds larger than the captured amount" $
-      transition capturedPayment (Refund (Money 1001))
+      transition capturedPayment (Refund (mkMoney 1001))
         `shouldBe` Left RefundExceedsCapturedAmount
 
     it "rejects non-positive refunds" $ do
-      transition capturedPayment (Refund (Money 0))
+      transition capturedPayment (Refund (mkMoney 0))
         `shouldBe` Left InvalidRefundAmount
-      transition capturedPayment (Refund (Money (-1)))
+      transition capturedPayment (Refund (mkMoney (-1)))
         `shouldBe` Left InvalidRefundAmount
 
     it "rejects every invalid non-terminal transition" $
@@ -81,6 +81,15 @@ main = hspec $ do
       storeAfterSecond `shouldBe` storeAfterFirst
       secondResult `shouldBe` firstResult
 
+    it "rejects a reused key with a different event" $ do
+      let key = IdempotencyKey (Text.pack "request-2")
+          (storeAfterFirst, _) =
+            applyIdempotent emptyStore createdPayment key Authorize
+          (storeAfterSecond, result) =
+            applyIdempotent storeAfterFirst createdPayment key Capture
+      storeAfterSecond `shouldBe` storeAfterFirst
+      result `shouldBe` Left (IdempotencyKeyConflict Authorize Capture)
+
   describe "properties" $ do
     it "never refunds more than the captured amount" $
       property prop_refundNeverExceedsCaptured
@@ -91,15 +100,14 @@ main = hspec $ do
     it "reusing an idempotency key equals applying it once" $
       property prop_idempotencyIsStable
 
+    it "never refunds more than captured across multiple refunds" $
+      property prop_multipleRefundsNeverExceedCaptured
+
 createdPayment :: Payment
 createdPayment =
-  Payment
-    { paymentId = Text.pack "payment-1"
-    , paymentAmount = Money 1000
-    , paymentState = Created
-    , capturedAmount = Nothing
-    , refundedAmount = Money 0
-    }
+  case newPayment (Text.pack "payment-1") (mkMoney 1000) of
+    Right payment -> payment
+    Left errorMessage -> error (show errorMessage)
 
 authorizedPayment :: Payment
 authorizedPayment = createdPayment { paymentState = Authorized }
@@ -108,14 +116,14 @@ capturedPayment :: Payment
 capturedPayment =
   authorizedPayment
     { paymentState = Captured
-    , capturedAmount = Just (Money 1000)
+    , capturedAmount = Just (mkMoney 1000)
     }
 
 allEvents :: [Event]
 allEvents =
   [ Authorize
   , Capture
-  , Refund (Money 1)
+  , Refund (mkMoney 1)
   , Void
   , Fail (Text.pack "failure")
   ]
@@ -125,7 +133,7 @@ invalidTransitions =
   [ (createdPayment, Capture)
   , (createdPayment, Void)
   , (authorizedPayment, Authorize)
-  , (authorizedPayment, Refund (Money 100))
+  , (authorizedPayment, Refund (mkMoney 100))
   , (capturedPayment, Authorize)
   , (capturedPayment, Capture)
   , (capturedPayment, Void)
@@ -148,7 +156,7 @@ assertTerminalState state =
 
 prop_refundNeverExceedsCaptured :: Positive Integer -> Property
 prop_refundNeverExceedsCaptured (Positive requested) =
-  let result = transition capturedPayment (Refund (Money requested))
+  let result = transition capturedPayment (Refund (mkMoney requested))
    in case result of
         Left RefundExceedsCapturedAmount -> property True
         Left InvalidRefundAmount -> property False
@@ -173,3 +181,25 @@ prop_idempotencyIsStable (Positive suffix) =
       once = applyIdempotent emptyStore createdPayment key Authorize
       twice = applyIdempotent (fst once) createdPayment key Authorize
    in twice === once
+
+prop_multipleRefundsNeverExceedCaptured :: [Positive Integer] -> Property
+prop_multipleRefundsNeverExceedCaptured requests =
+  let refunds = map (Refund . mkMoney . getPositive) requests
+      results = scanl applyRefundEvent (Right capturedPayment) refunds
+   in conjoin
+        [ case result of
+            Left RefundExceedsCapturedAmount -> property True
+            Left InvalidRefundAmount -> property False
+            Left (InvalidTransition Refunded (Refund _)) -> property True
+            Right payment ->
+              property (minorUnits (refundedAmount payment) <= 1000)
+            Left _ -> property False
+        | result <- results
+        ]
+
+applyRefundEvent
+  :: Either TransitionError Payment
+  -> Event
+  -> Either TransitionError Payment
+applyRefundEvent (Left errorMessage) _ = Left errorMessage
+applyRefundEvent (Right payment) event = transition payment event
