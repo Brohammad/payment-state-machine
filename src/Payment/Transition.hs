@@ -62,35 +62,22 @@ applyRefund payment amount =
                 refunded = minorUnits (refundedAmount payment)
                 requested = minorUnits amount
                 remaining = captured - refunded
-             in if requested <= 0
-                    then Left (InvalidRefundAmount amount)
+             in if requested > remaining
+                    then Left (RefundExceedsCapturedAmount amount)
                     else
-                        if requested > remaining
+                        if requested == remaining
                             then
-                                Left
-                                    (RefundExceedsCapturedAmount amount (positiveMoney remaining))
+                                success
+                                    payment
+                                    (Refund amount)
+                                    Refunded
+                                    (\updated -> updated{refundedAmount = addMoney (refundedAmount updated) amount})
                             else
-                                if requested == remaining
-                                    then
-                                        success
-                                            payment
-                                            (Refund amount)
-                                            Refunded
-                                            ( \updated ->
-                                                updated
-                                                    { refundedAmount = positiveMoney (refunded + requested)
-                                                    }
-                                            )
-                                    else
-                                        success
-                                            payment
-                                            (Refund amount)
-                                            Captured
-                                            ( \updated ->
-                                                updated
-                                                    { refundedAmount = positiveMoney (refunded + requested)
-                                                    }
-                                            )
+                                success
+                                    payment
+                                    (Refund amount)
+                                    Captured
+                                    (\updated -> updated{refundedAmount = addMoney (refundedAmount updated) amount})
 
 success ::
     Payment ->
@@ -114,9 +101,3 @@ successWithReason payment event state reason =
         event
         state
         (\updated -> updated{failureReason = Just reason})
-
-positiveMoney :: Integer -> Money
-positiveMoney value =
-    case mkMoney value of
-        Just amount -> amount
-        Nothing -> error "positiveMoney called with a non-positive value"

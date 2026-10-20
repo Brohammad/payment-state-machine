@@ -75,14 +75,14 @@ main = hspec $ do
                         }
                     )
 
-        it "fails a captured payment" $
+        it "rejects failure after capture" $
             transition capturedPayment (Fail (Text.pack "processor error"))
                 `shouldBe` Left
                     (InvalidTransition Captured (Fail (Text.pack "processor error")))
 
         it "rejects refunds larger than the captured amount" $
             transition capturedPayment (Refund (money 1001))
-                `shouldBe` Left (RefundExceedsCapturedAmount (money 1001) (money 1000))
+                `shouldBe` Left (RefundExceedsCapturedAmount (money 1001))
 
         it "rejects non-positive refunds" $ do
             mkMoney 0 `shouldBe` Nothing
@@ -219,7 +219,6 @@ prop_refundNeverExceedsCaptured (Positive requested) =
     let result = transition capturedPayment (Refund (money requested))
      in case result of
             Left RefundExceedsCapturedAmount{} -> property True
-            Left InvalidRefundAmount{} -> property False
             Right payment ->
                 counterexample
                     "a successful refund must not exceed the captured amount"
@@ -250,7 +249,6 @@ prop_multipleRefundsNeverExceedCaptured requests =
      in conjoin
             [ case result of
                 Left RefundExceedsCapturedAmount{} -> property True
-                Left InvalidRefundAmount{} -> property False
                 Left (InvalidTransition Refunded (Refund _)) -> property True
                 Right payment ->
                     property (minorUnits (refundedAmount payment) <= 1000)

@@ -2,6 +2,8 @@ module Payment.Types (
     Money,
     minorUnits,
     mkMoney,
+    addMoney,
+    subtractMoney,
     PaymentState (..),
     Event (..),
     PaymentEvent (..),
@@ -28,6 +30,14 @@ mkMoney :: Integer -> Maybe Money
 mkMoney value
     | value <= 0 = Nothing
     | otherwise = Just (Money value)
+
+addMoney :: Money -> Money -> Money
+addMoney (Money first) (Money second) = Money (first + second)
+
+subtractMoney :: Money -> Money -> Maybe Money
+subtractMoney (Money first) (Money second)
+    | first <= second = Nothing
+    | otherwise = Just (Money (first - second))
 
 -- PaymentState describes where a payment is in its lifecycle.
 data PaymentState
@@ -70,8 +80,7 @@ data Payment = Payment
 -- TransitionError explains why an event cannot be applied.
 data TransitionError
     = InvalidTransition PaymentState Event
-    | RefundExceedsCapturedAmount Money Money
-    | InvalidRefundAmount Money
+    | RefundExceedsCapturedAmount Money
     | InvalidPaymentAmount Integer
     | IdempotencyKeyConflict Event Event
     deriving (Eq, Show)

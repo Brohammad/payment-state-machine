@@ -40,6 +40,8 @@ The main rules are:
   has been refunded.
 - The total refunded amount cannot exceed the captured amount.
 - A payment can be voided only while authorized.
+- A payment can fail only before capture; captured payments require a refund,
+  reversal, or chargeback flow instead.
 - Failed, voided, and fully refunded payments are terminal.
 
 ## Why types help prevent illegal states
